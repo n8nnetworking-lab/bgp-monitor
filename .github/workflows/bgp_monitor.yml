@@ -39,17 +39,17 @@ jobs:
           TRIGGER="${{ github.event_name }}"
           MANUAL="${{ github.event.inputs.send_report }}"
 
-          # Reporte PDF: diario 13:00 UTC o manual con send_report=true
+          # Reporte PDF: 13:00 UTC (10AM Chile), 20:30 UTC (17:30 Chile), o manual
           if [ "$TRIGGER" = "workflow_dispatch" ] && [ "$MANUAL" = "true" ]; then
             echo "send_report=true" >> $GITHUB_OUTPUT
-          elif [ "$TRIGGER" = "schedule" ] && [ "$HOUR" = "13" ]; then
+          elif [ "$TRIGGER" = "schedule" ] && { [ "$HOUR" = "13" ] || [ "$HOUR" = "20" ]; }; then
             echo "send_report=true" >> $GITHUB_OUTPUT
           else
             echo "send_report=false" >> $GITHUB_OUTPUT
           fi
 
-          # Estado OK: siempre en ejecución manual y en reporte diario (13:00 UTC)
-          if [ "$TRIGGER" = "workflow_dispatch" ] || [ "$HOUR" = "13" ]; then
+          # Estado OK: manual, 13:00 UTC (10AM Chile) o 20:00 UTC (17:00 Chile aprox)
+          if [ "$TRIGGER" = "workflow_dispatch" ] || [ "$HOUR" = "13" ] || [ "$HOUR" = "20" ]; then
             echo "send_status=true" >> $GITHUB_OUTPUT
           else
             echo "send_status=false" >> $GITHUB_OUTPUT
