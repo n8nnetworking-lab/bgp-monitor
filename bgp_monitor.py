@@ -65,9 +65,8 @@ def fetch_announced_prefixes() -> set:
 
 
 def fetch_prefix_detail(prefix: str) -> dict:
-    """Detalle de un prefijo via BGPView (origen ASN, RIR, etc)."""
-    ip, length = prefix.split("/")
-    url = f"https://api.bgpview.io/prefix/{ip}/{length}"
+    """Detalle de un prefijo via RIPE STAT prefix-overview."""
+    url = f"https://stat.ripe.net/data/prefix-overview/data.json?resource={prefix}"
     try:
         resp = requests.get(url, timeout=15, headers=HEADERS)
         resp.raise_for_status()
@@ -75,53 +74,43 @@ def fetch_prefix_detail(prefix: str) -> dict:
         if data.get("status") == "ok":
             return data.get("data", {})
     except Exception as e:
-        print(f"    BGPView {prefix}: {e}")
+        print(f"    RIPE prefix-overview {prefix}: {e}")
     return {}
 
 
-def fetch_upstreams() -> list:
-    """Upstreams IPv4 de AS28091 via BGPView."""
-    url = f"https://api.bgpview.io/asn/{ASN}/upstreams"
+def fetch_neighbours() -> dict:
+    """Vecinos BGP de AS28091 via RIPE STAT asn-neighbours.
+    Retorna {"upstreams": [...], "peers": [...]} con dicts {asn, name}."""
+    url = f"https://stat.ripe.net/data/asn-neighbours/data.json?resource=AS{ASN}"
     try:
         resp = requests.get(url, timeout=15, headers=HEADERS)
         resp.raise_for_status()
         data = resp.json()
         if data.get("status") == "ok":
-            return data.get("data", {}).get("ipv4_upstreams", [])
+            neighbours = data["data"].get("neighbours", [])
+            # type "left" = upstream, "uncertain" = peer, "right" = downstream
+            upstreams = [{"asn": n["asn"], "name": str(n["asn"]), "country_code": "", "description": ""}
+                         for n in neighbours if n.get("type") == "left"]
+            peers     = [{"asn": n["asn"]} for n in neighbours if n.get("type") == "uncertain"]
+            return {"upstreams": upstreams, "peers": peers}
     except Exception as e:
-        print(f"    BGPView upstreams: {e}")
-    return []
-
-
-def fetch_peers() -> list:
-    """Peers IPv4 de AS28091 via BGPView."""
-    url = f"https://api.bgpview.io/asn/{ASN}/peers"
-    try:
-        resp = requests.get(url, timeout=15, headers=HEADERS)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") == "ok":
-            return data.get("data", {}).get("ipv4_peers", [])
-    except Exception as e:
-        print(f"    BGPView peers: {e}")
-    return []
+        print(f"    RIPE asn-neighbours: {e}")
+    return {"upstreams": [], "peers": []}
 
 
 # ─── BUILD STATUS ─────────────────────────────────────────────────────────────
 
 def build_status() -> dict:
-    print("  [1/4] Consultando prefijos anunciados (RIPE STAT)...")
+    print("  [1/3] Consultando prefijos anunciados (RIPE STAT)...")
     announced = fetch_announced_prefixes()
 
-    print("  [2/4] Consultando upstreams (BGPView)...")
-    upstreams = fetch_upstreams()
+    print("  [2/3] Consultando vecinos BGP (RIPE STAT)...")
+    neighbours = fetch_neighbours()
+    upstreams  = neighbours["upstreams"]
+    peers      = neighbours["peers"]
     time.sleep(1)
 
-    print("  [3/4] Consultando peers (BGPView)...")
-    peers = fetch_peers()
-    time.sleep(1)
-
-    print("  [4/4] Verificando cada prefijo...")
+    print("  [3/3] Verificando cada prefijo...")
     prefix_statuses = []
     for prefix in EXPECTED_PREFIXES:
         visible = prefix in announced
@@ -138,16 +127,16 @@ def build_status() -> dict:
             origin_asn = asn_info.get("asn")
             break
 
-        rir_name = "-"
-        rir_alloc = detail.get("rir_allocation", {})
-        if rir_alloc:
-            rir_name = rir_alloc.get("rir_name", "-")
+        # RIPE prefix-overview no incluye RIR directamente, usar holder
+        holder = ""
+        if detail.get("asns"):
+            holder = detail["asns"][0].get("holder", "")
 
         prefix_statuses.append({
             "prefix":     prefix,
             "visible":    visible,
             "origin_asn": origin_asn,
-            "rir":        rir_name,
+            "rir":        holder[:20] if holder else "LACNIC",
         })
 
     return {
@@ -252,7 +241,7 @@ def build_pdf(status: dict) -> str:
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_xy(12, 7)
-    pdf.cell(0, 10, f"Monitor BGP — AS{ASN}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(0, 10, f"Monitor BGP - AS{ASN}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     pdf.set_font("Helvetica", "", 9)
     pdf.set_xy(12, 20)
