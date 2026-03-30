@@ -1,0 +1,56 @@
+name: Monitor BGP AS28091
+
+on:
+  schedule:
+    # Cada hora a los :00 minutos (UTC)
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      send_report:
+        description: "Forzar envío de reporte PDF"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  monitor-bgp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Determinar si enviar reporte diario
+        id: check-report
+        run: |
+          HOUR=$(date -u +%H)
+          TRIGGER="${{ github.event_name }}"
+          MANUAL="${{ github.event.inputs.send_report }}"
+          # Reporte diario a las 13:00 UTC (10:00 AM Chile)
+          if [ "$TRIGGER" = "workflow_dispatch" ] && [ "$MANUAL" = "true" ]; then
+            echo "send_report=true" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "schedule" ] && [ "$HOUR" = "13" ]; then
+            echo "send_report=true" >> $GITHUB_OUTPUT
+          else
+            echo "send_report=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Monitorear BGP
+        env:
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          SEND_REPORT:        ${{ steps.check-report.outputs.send_report }}
+        run: python bgp_monitor.py
