@@ -32,13 +32,14 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt
 
-      - name: Determinar si enviar reporte diario
+      - name: Determinar modo de envío
         id: check-report
         run: |
           HOUR=$(date -u +%H)
           TRIGGER="${{ github.event_name }}"
           MANUAL="${{ github.event.inputs.send_report }}"
-          # Reporte diario a las 13:00 UTC (10:00 AM Chile)
+
+          # Reporte PDF: diario 13:00 UTC o manual con send_report=true
           if [ "$TRIGGER" = "workflow_dispatch" ] && [ "$MANUAL" = "true" ]; then
             echo "send_report=true" >> $GITHUB_OUTPUT
           elif [ "$TRIGGER" = "schedule" ] && [ "$HOUR" = "13" ]; then
@@ -47,10 +48,18 @@ jobs:
             echo "send_report=false" >> $GITHUB_OUTPUT
           fi
 
+          # Estado OK: siempre en ejecución manual y en reporte diario (13:00 UTC)
+          if [ "$TRIGGER" = "workflow_dispatch" ] || [ "$HOUR" = "13" ]; then
+            echo "send_status=true" >> $GITHUB_OUTPUT
+          else
+            echo "send_status=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Monitorear BGP
         env:
           GMAIL_USER:         ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           SEND_REPORT:        ${{ steps.check-report.outputs.send_report }}
+          SEND_STATUS:        ${{ steps.check-report.outputs.send_status }}
         run: python bgp_monitor.py

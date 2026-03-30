@@ -32,6 +32,7 @@ GMAIL_USER         = os.environ.get("GMAIL_USER",         "n8nnetworking@gmail.c
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "awcu xeok iuac ylai")
 EMAIL_TO           = os.environ.get("EMAIL_TO",           "redes@sixmanager.com")
 SEND_REPORT        = os.environ.get("SEND_REPORT", "false").lower() == "true"
+SEND_STATUS        = os.environ.get("SEND_STATUS", "false").lower() == "true"
 PDF_FILE           = "bgp_report.pdf"
 
 HEADERS = {"User-Agent": "SixManager-BGP-Monitor/1.0 (redes@sixmanager.com)"}
@@ -645,6 +646,113 @@ def send_report(status: dict, pdf_path: str):
     print(f"[OK] Reporte BGP enviado → {EMAIL_TO}")
 
 
+# ─── EMAIL ESTADO OK ──────────────────────────────────────────────────────────
+
+def send_ok_status(status: dict):
+    now       = status["timestamp"]
+    dia       = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][now.weekday()]
+    fecha_str = f"{dia} {now.strftime('%d/%m/%Y %H:%M')}"
+    subject   = f"[BGP OK] AS{ASN} — Prefijos operativos — {fecha_str}"
+
+    prefixes = status["prefixes"]
+    rows = "".join(
+        f"<tr>"
+        f"<td style='padding:9px 14px;font-family:monospace;font-size:13px;"
+        f"color:#166534;border-bottom:1px solid #bbf7d0;'>{p['prefix']}</td>"
+        f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #bbf7d0;'>"
+        f"<span style='background:#16a34a;color:white;padding:3px 10px;border-radius:4px;"
+        f"font-size:11px;font-weight:bold;'>OPERATIVO</span></td>"
+        f"<td style='padding:9px 14px;text-align:center;color:#166534;"
+        f"border-bottom:1px solid #bbf7d0;font-size:12px;font-weight:600;'>100%</td>"
+        f"<td style='padding:9px 14px;text-align:center;color:#166534;"
+        f"border-bottom:1px solid #bbf7d0;font-size:12px;'>✔ Alcanzable</td>"
+        f"</tr>"
+        for p in prefixes
+    )
+
+    html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:30px 0;">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0"
+  style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.09);">
+  <tr><td style="background:linear-gradient(135deg,#14532d 0%,#16a34a 100%);padding:30px 40px 24px;">
+    <p style="margin:0;color:#bbf7d0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:700;">
+      Estado BGP — Área de Redes SixManager</p>
+    <h1 style="margin:8px 0 4px;color:#fff;font-size:22px;font-weight:700;">
+      Prefijos BGP Operativos ✔</h1>
+    <p style="margin:0;color:#dcfce7;font-size:13px;">AS{ASN} SIXMANAGER TECNOLOGIAS SPA · {fecha_str}</p>
+  </td></tr>
+  <tr><td style="padding:32px 40px;">
+
+    <!-- Banner verde -->
+    <div style="background:#f0fdf4;border-left:5px solid #16a34a;border-radius:0 8px 8px 0;
+      padding:14px 20px;margin-bottom:28px;">
+      <p style="margin:0;color:#14532d;font-size:15px;font-weight:700;">
+        ✔ &nbsp;Todos los prefijos son visibles, alcanzables y funcionales</p>
+      <p style="margin:0 0 0 24px;color:#166534;font-size:13px;margin-top:4px;">
+        {len(prefixes)}/{len(prefixes)} prefijos visibles en la tabla de rutas global
+      </p>
+    </div>
+
+    <!-- Tabla de prefijos -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="border:1px solid #bbf7d0;border-radius:8px;overflow:hidden;margin-bottom:28px;">
+      <thead><tr style="background:#dcfce7;">
+        <th style="padding:10px 14px;text-align:left;font-size:11px;color:#14532d;
+          letter-spacing:1px;text-transform:uppercase;">Prefijo</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;color:#14532d;
+          letter-spacing:1px;text-transform:uppercase;">Estado</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;color:#14532d;
+          letter-spacing:1px;text-transform:uppercase;">Disponibilidad</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;color:#14532d;
+          letter-spacing:1px;text-transform:uppercase;">Alcanzabilidad</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+
+    <!-- Info técnica -->
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="background:#eff6ff;border-left:4px solid #2563eb;border-radius:0 8px 8px 0;margin-bottom:24px;">
+      <tr><td style="padding:16px 20px;">
+        <p style="margin:0 0 8px;color:#1e40af;font-size:11px;font-weight:700;
+          letter-spacing:1px;text-transform:uppercase;">Detalle técnico</p>
+        <p style="margin:0;color:#1e3a8a;font-size:13px;line-height:2.1;">
+          📡 &nbsp;ASN: <strong>AS{ASN}</strong> — SIXMANAGER TECNOLOGIAS SPA<br>
+          🔗 &nbsp;Upstreams IPv4 activos: <strong>{len(status['upstreams'])}</strong><br>
+          👥 &nbsp;Peers IPv4: <strong>{len(status['peers'])}</strong><br>
+          🌐 &nbsp;Total prefijos anunciados: <strong>{status['announced_total']}</strong><br>
+          🕐 &nbsp;Verificado: <strong>{fecha_str} (hora Chile)</strong><br>
+          🔍 &nbsp;Fuente: <strong>RIPE STAT / BGPView</strong>
+        </p>
+      </td></tr>
+    </table>
+
+  </td></tr>
+  <tr><td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:16px 40px;">
+    <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.6;">
+      🤖 &nbsp;Verificación automática por el
+      <strong style="color:#6b7280;">Agente IA del Área de Redes</strong> · SixManager<br>
+      Monitoreo cada hora · Alerta inmediata ante cualquier anomalía BGP
+    </p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+    msg = MIMEText(html, "html", "utf-8")
+    msg["From"]    = f"Agente IA Redes <{GMAIL_USER}>"
+    msg["To"]      = EMAIL_TO
+    msg["Subject"] = subject
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as srv:
+        srv.ehlo(); srv.starttls()
+        srv.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        srv.sendmail(GMAIL_USER, EMAIL_TO, msg.as_string())
+
+    print(f"[OK] Estado OK enviado → {EMAIL_TO}")
+
+
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -667,6 +775,9 @@ if __name__ == "__main__":
         send_alert(missing)
     else:
         print("  Estado: TODOS OK")
+        if SEND_STATUS:
+            print("Enviando confirmación de estado OK...")
+            send_ok_status(status)
 
     if SEND_REPORT:
         print("\nGenerando reporte PDF...")
