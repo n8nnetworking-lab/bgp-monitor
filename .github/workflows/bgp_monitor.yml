@@ -2,8 +2,12 @@ name: Monitor BGP AS28091
 
 on:
   schedule:
-    # Cada hora a los :00 minutos (UTC)
+    # Verificación silenciosa cada hora (alerta si cae un prefijo)
     - cron: "0 * * * *"
+    # Informe 10:00 AM Chile = 13:00 UTC
+    - cron: "0 13 * * *"
+    # Informe 17:30 Chile = 20:30 UTC
+    - cron: "30 20 * * *"
   workflow_dispatch:
     inputs:
       send_report:
@@ -35,23 +39,20 @@ jobs:
       - name: Determinar modo de envío
         id: check-report
         run: |
-          HOUR=$(date -u +%H)
           TRIGGER="${{ github.event_name }}"
           MANUAL="${{ github.event.inputs.send_report }}"
+          SCHEDULE="${{ github.event.schedule }}"
 
-          # Reporte PDF: 13:00 UTC (10AM Chile), 20:30 UTC (17:30 Chile), o manual
-          if [ "$TRIGGER" = "workflow_dispatch" ] && [ "$MANUAL" = "true" ]; then
+          # Informe completo: crons dedicados (13:00 y 20:30 UTC) o manual con send_report=true
+          if { [ "$TRIGGER" = "workflow_dispatch" ] && [ "$MANUAL" = "true" ]; } || \
+             { [ "$TRIGGER" = "schedule" ] && { [ "$SCHEDULE" = "0 13 * * *" ] || [ "$SCHEDULE" = "30 20 * * *" ]; }; }; then
             echo "send_report=true" >> $GITHUB_OUTPUT
-          elif [ "$TRIGGER" = "schedule" ] && { [ "$HOUR" = "13" ] || [ "$HOUR" = "20" ]; }; then
-            echo "send_report=true" >> $GITHUB_OUTPUT
-          else
+            echo "send_status=true" >> $GITHUB_OUTPUT
+          elif [ "$TRIGGER" = "workflow_dispatch" ]; then
             echo "send_report=false" >> $GITHUB_OUTPUT
-          fi
-
-          # Estado OK: manual, 13:00 UTC (10AM Chile) o 20:00 UTC (17:00 Chile aprox)
-          if [ "$TRIGGER" = "workflow_dispatch" ] || [ "$HOUR" = "13" ] || [ "$HOUR" = "20" ]; then
             echo "send_status=true" >> $GITHUB_OUTPUT
           else
+            echo "send_report=false" >> $GITHUB_OUTPUT
             echo "send_status=false" >> $GITHUB_OUTPUT
           fi
 
