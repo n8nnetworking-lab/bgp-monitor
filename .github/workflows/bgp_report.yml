@@ -1,15 +1,18 @@
-name: Monitor BGP AS28091
+name: Informe BGP AS28091
 
 on:
   schedule:
-    # Verificación silenciosa cada hora — alerta si cae un prefijo
-    - cron: "0 * * * *"
+    # 10:00 AM Chile = 13:00 UTC
+    - cron: "0 13 * * *"
+    # 17:30 Chile = 20:30 UTC
+    - cron: "30 20 * * *"
+  workflow_dispatch:  # ejecución manual siempre envía informe
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  monitor-bgp:
+  enviar-informe:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,11 +27,11 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt
 
-      - name: Verificar prefijos BGP
+      - name: Enviar informe BGP
         env:
           GMAIL_USER:         ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-          SEND_STATUS:        "false"
-          SEND_REPORT:        "false"
+          SEND_STATUS:        "true"
+          SEND_REPORT:        "true"
         run: python bgp_monitor.py
